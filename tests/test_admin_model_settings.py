@@ -90,6 +90,59 @@ async def _update_settings(
 
 
 @pytest.mark.asyncio
+async def test_clef_ane_settings_are_saved_and_cleared(tmp_path):
+    (tmp_path / "joint_head.safetensors").touch()
+    (tmp_path / "joint_head_config.json").write_text("{}")
+    pool, entry = _failed_pool()
+    entry.model_path = str(tmp_path)
+    entry.model_type = entry.engine_type = "decision"
+    entry.config_model_type = "qwen3_5"
+    settings = ModelSettings()
+    await _update_settings(
+        pool,
+        settings,
+        admin_routes.ModelSettingsRequest(
+            qwen35_ane_prefill_enabled=True,
+            qwen35_ane_prefill_sequence_length=1024,
+            qwen35_ane_prefill_fraction=0.25,
+            qwen35_ane_prefill_dual_ane=False,
+            qwen35_ane_prefill_gdn=False,
+            qwen35_ane_prefill_cpu_enabled=False,
+        ),
+    )
+    assert settings.qwen35_ane_prefill_enabled is True
+    assert settings.qwen35_ane_prefill_cpu_enabled is False
+    assert entry.load_failed is False
+    await _update_settings(
+        pool,
+        settings,
+        admin_routes.ModelSettingsRequest(
+            qwen35_ane_prefill_enabled=False,
+        ),
+    )
+    assert settings.qwen35_ane_prefill_enabled is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("value", [2000, None])
+async def test_clef_block_size_is_validated_before_save(tmp_path, value):
+    (tmp_path / "joint_head.safetensors").touch()
+    (tmp_path / "joint_head_config.json").write_text("{}")
+    pool, entry = _failed_pool()
+    entry.model_path = str(tmp_path)
+    entry.model_type = entry.engine_type = "decision"
+    entry.config_model_type = "qwen3_5"
+    with pytest.raises(HTTPException):
+        await _update_settings(
+            pool,
+            ModelSettings(),
+            admin_routes.ModelSettingsRequest(
+                qwen35_ane_prefill_sequence_length=value,
+            ),
+        )
+
+
+@pytest.mark.asyncio
 async def test_load_time_setting_change_clears_cached_failure():
     pool, entry = _failed_pool()
     settings = ModelSettings(trust_remote_code=False)
